@@ -41,7 +41,7 @@ class LoadTestsBuilder {
 
   static void loadTest(context, String title, Runner runner, SDK sdk, Map<String, ?> options,
       String mainClass, Boolean withDataflowWorkerJar = false) {
-    options.put('runner', runner.option)
+    options.put('runner', runner.getDependencyBySDK(sdk))
     InfluxDBCredentialsHelper.useCredentials(context)
 
     context.steps {
@@ -88,12 +88,15 @@ class LoadTestsBuilder {
   }
 
   private static String getGradleTaskName(SDK sdk) {
-    if (sdk == SDK.JAVA) {
-      return ':sdks:java:testing:load-tests:run'
-    } else if (sdk == SDK.PYTHON) {
-      return ':sdks:python:apache_beam:testing:load_tests:run'
-    } else {
-      throw new RuntimeException("No task name defined for SDK: $SDK")
+    switch (sdk) {
+      case SDK.JAVA:
+        return ':sdks:java:testing:load-tests:run'
+      case SDK.PYTHON:
+        return ':sdks:python:apache_beam:testing:load_tests:run'
+      case SDK.GO:
+        return ':sdks:go:test:load:run'
+      default:
+        throw new RuntimeException("No task name defined for SDK: $SDK")
     }
   }
 }

@@ -128,6 +128,7 @@ func (fn *sourceFn) Setup() {
 // tracker received. Each element is a random byte slice key and value, in the
 // form of KV<[]byte, []byte>.
 func (fn *sourceFn) ProcessElement(rt *sdf.LockRTracker, config SourceConfig, emit func([]byte, []byte)) error {
+	cnt := 0
 	for i := rt.GetRestriction().(offsetrange.Restriction).Start; rt.TryClaim(i) == true; i++ {
 		key := make([]byte, config.KeySize)
 		val := make([]byte, config.ValueSize)
@@ -138,6 +139,8 @@ func (fn *sourceFn) ProcessElement(rt *sdf.LockRTracker, config SourceConfig, em
 			return err
 		}
 		emit(key, val)
+		cnt++
+		if cnt >= config.NumKeys { break }
 	}
 	return nil
 }
@@ -169,6 +172,7 @@ func DefaultSourceConfig() *SourceConfigBuilder {
 			InitialSplits: 1, // 0 is invalid (drops elements).
 			KeySize:       8, // 0 is invalid (drops elements).
 			ValueSize:     8, // 0 is invalid (drops elements).
+			NumKeys: 	   8, // 0 is invalid (drops elements).
 		},
 	}
 }
@@ -235,6 +239,9 @@ func (b *SourceConfigBuilder) Build() SourceConfig {
 	if b.cfg.ValueSize <= 0 {
 		panic(fmt.Sprintf("SourceConfig.ValueSize must be >= 1. Got: %v", b.cfg.ValueSize))
 	}
+	if b.cfg.NumKeys <= 0 {
+		panic(fmt.Sprintf("SourceConfig.NumKeys must be >= 1. Got: #{b.cfg.NumKeys}"))
+	}
 	return b.cfg
 }
 
@@ -246,7 +253,8 @@ func (b *SourceConfigBuilder) Build() SourceConfig {
 // {
 // 	 "num_records": 5,
 // 	 "key_size": 5,
-// 	 "value_size": 5
+// 	 "value_size": 5,
+//	 "num_keys": 5,
 // }
 func (b *SourceConfigBuilder) BuildFromJSON(jsonData []byte) SourceConfig {
 	decoder := json.NewDecoder(bytes.NewReader(jsonData))
@@ -264,6 +272,7 @@ func (b *SourceConfigBuilder) BuildFromJSON(jsonData []byte) SourceConfig {
 type SourceConfig struct {
 	NumElements   int `json:"num_records"`
 	InitialSplits int `json:"initial_splits"`
+	NumKeys		  int `json:"num_keys"`
 	KeySize       int `json:"key_size"`
 	ValueSize     int `json:"value_size"`
 }

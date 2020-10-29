@@ -16,9 +16,16 @@
 package synthetic
 
 import (
+	"flag"
 	"fmt"
 	"testing"
 )
+
+var sourceConfigFlag = flag.String("sourceConfig", "", "SourceConfig JSON or path to it")
+
+func getSourceConfigStringFromFlag() string {
+	return *sourceConfigFlag
+}
 
 // TestSourceConfig_NumElements tests that setting the number of produced
 // elements for a synthetic source works correctly.
@@ -142,6 +149,7 @@ func TestSourceConfig_InitialSplits(t *testing.T) {
 // TestSourceConfig_BuildFromJSON tests correctness of building the
 // SourceConfig from JSON data.
 func TestSourceConfig_BuildFromJSON(t *testing.T) {
+	fmt.Println(getSourceConfigStringFromFlag())
 	tests := []struct {
 		jsonData string
 		want     SourceConfig

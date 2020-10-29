@@ -96,6 +96,7 @@ func Execute(ctx context.Context, p *beam.Pipeline) error {
 		Experiments:  jobopts.GetExperiments(),
 		Worker:       *jobopts.WorkerBinary,
 		RetainDocker: *jobopts.RetainDockerContainers,
+		Parallelism:  *jobopts.Parallelism,
 	}
 	_, err = runnerlib.Execute(ctx, pipeline, endpoint, opt, *jobopts.Async)
 	return err

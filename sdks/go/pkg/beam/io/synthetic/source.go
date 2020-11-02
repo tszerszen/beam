@@ -23,20 +23,19 @@
 package synthetic
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"github.com/apache/beam/sdks/go/pkg/beam/core/sdf"
-	"math/rand"
-	"reflect"
-	"time"
-
-	"github.com/apache/beam/sdks/go/pkg/beam"
-	"github.com/apache/beam/sdks/go/pkg/beam/io/rtrackers/offsetrange"
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "github.com/apache/beam/sdks/go/pkg/beam"
+    "github.com/apache/beam/sdks/go/pkg/beam/core/sdf"
+    "github.com/apache/beam/sdks/go/pkg/beam/io/rtrackers/offsetrange"
+    "math/rand"
+    "reflect"
+    "time"
 )
 
 func init() {
-	beam.RegisterType(reflect.TypeOf((*sourceFn)(nil)).Elem())
+    beam.RegisterType(reflect.TypeOf((*sourceFn)(nil)).Elem())
 }
 
 // Source creates a synthetic source transform that emits randomly
@@ -57,9 +56,9 @@ func init() {
 //        synthetic.DefaultSourceConfig().NumElements(5000).InitialSplits(2).Build())
 //    src := synthetic.Source(s, cfgs)
 func Source(s beam.Scope, col beam.PCollection) beam.PCollection {
-	s = s.Scope("synthetic.Source")
+    s = s.Scope("synthetic.Source")
 
-	return beam.ParDo(s, &sourceFn{}, col)
+    return beam.ParDo(s, &sourceFn{}, col)
 }
 
 // SourceSingle creates a synthetic source transform that emits randomly
@@ -75,10 +74,10 @@ func Source(s beam.Scope, col beam.PCollection) beam.PCollection {
 //    src := synthetic.SourceSingle(s,
 //        synthetic.DefaultSourceConfig().NumElements(5000).InitialSplits(2).Build())
 func SourceSingle(s beam.Scope, cfg SourceConfig) beam.PCollection {
-	s = s.Scope("synthetic.Source")
+    s = s.Scope("synthetic.Source")
 
-	col := beam.Create(s, cfg)
-	return beam.ParDo(s, &sourceFn{}, col)
+    col := beam.Create(s, cfg)
+    return beam.ParDo(s, &sourceFn{}, col)
 }
 
 // sourceFn is a splittable DoFn implementing behavior for synthetic sources.
@@ -87,16 +86,16 @@ func SourceSingle(s beam.Scope, cfg SourceConfig) beam.PCollection {
 // The sourceFn is expected to receive elements of type sourceConfig and follow
 // that config to determine its behavior when splitting and emitting elements.
 type sourceFn struct {
-	rng randWrapper
+    rng randWrapper
 }
 
 // CreateInitialRestriction creates an offset range restriction representing
 // the number of elements to emit.
 func (fn *sourceFn) CreateInitialRestriction(config SourceConfig) offsetrange.Restriction {
-	return offsetrange.Restriction{
-		Start: 0,
-		End:   int64(config.NumElements),
-	}
+    return offsetrange.Restriction{
+        Start: 0,
+        End:   int64(config.NumElements),
+    }
 }
 
 // SplitRestriction splits restrictions equally according to the number of
@@ -104,45 +103,50 @@ func (fn *sourceFn) CreateInitialRestriction(config SourceConfig) offsetrange.Re
 // method will contain at least one element, so the number of splits will not
 // exceed the number of elements.
 func (fn *sourceFn) SplitRestriction(config SourceConfig, rest offsetrange.Restriction) (splits []offsetrange.Restriction) {
-	return rest.EvenSplits(int64(config.InitialSplits))
+    return rest.EvenSplits(int64(config.InitialSplits))
 }
 
 // RestrictionSize outputs the size of the restriction as the number of elements
 // that restriction will output.
 func (fn *sourceFn) RestrictionSize(_ SourceConfig, rest offsetrange.Restriction) float64 {
-	return rest.Size()
+    return rest.Size()
 }
 
 // CreateTracker just creates an offset range restriction tracker for the
 // restriction.
 func (fn *sourceFn) CreateTracker(rest offsetrange.Restriction) *sdf.LockRTracker {
-	return sdf.NewLockRTracker(offsetrange.NewTracker(rest))
+    return sdf.NewLockRTracker(offsetrange.NewTracker(rest))
 }
 
 // Setup sets up the random number generator.
 func (fn *sourceFn) Setup() {
-	fn.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+    fn.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+}
+
+// Seed sets up the random number generator with given randSource.
+func (fn *sourceFn) Seed(randSource rand.Source) {
+    fn.rng = rand.New(randSource)
 }
 
 // ProcessElement creates a number of random elements based on the restriction
 // tracker received. Each element is a random byte slice key and value, in the
 // form of KV<[]byte, []byte>.
 func (fn *sourceFn) ProcessElement(rt *sdf.LockRTracker, config SourceConfig, emit func([]byte, []byte)) error {
-	cnt := 0
-	for i := rt.GetRestriction().(offsetrange.Restriction).Start; rt.TryClaim(i) == true; i++ {
-		key := make([]byte, config.KeySize)
-		val := make([]byte, config.ValueSize)
-		if _, err := fn.rng.Read(key); err != nil {
-			return err
-		}
-		if _, err := fn.rng.Read(val); err != nil {
-			return err
-		}
-		emit(key, val)
-		cnt++
-		if cnt >= config.NumKeys { break }
-	}
-	return nil
+    for i := rt.GetRestriction().(offsetrange.Restriction).Start; rt.TryClaim(i) == true; i++ {
+        key := make([]byte, config.KeySize)
+        val := make([]byte, config.ValueSize)
+        generator := sourceFn{}
+        generator.Seed(rand.NewSource(i))
+        randomSample := generator.rng.Float64()
+        if randomSample < float64(config.HotKeyFraction) {
+            generatorHot := sourceFn{}
+            generatorHot.Seed(rand.NewSource(i % int64(config.HotKeys)))
+            if _, err := generatorHot.rng.Read(key); err != nil { return err }
+        } else { if _, err := generator.rng.Read(key); err != nil { return err } }
+        if _, err := fn.rng.Read(val); err != nil { return err }
+        emit(key, val)
+    }
+    return nil
 }
 
 // SourceConfigBuilder is used to initialize SourceConfigs. See
@@ -155,7 +159,7 @@ func (fn *sourceFn) ProcessElement(rt *sdf.LockRTracker, config SourceConfig, em
 //
 //    cfg := synthetic.DefaultSourceConfig().NumElements(5000).InitialSplits(2).Build()
 type SourceConfigBuilder struct {
-	cfg SourceConfig
+    cfg SourceConfig
 }
 
 // DefaultSourceConfig creates a SourceConfigBuilder set with intended defaults
@@ -166,15 +170,16 @@ type SourceConfigBuilder struct {
 // To see descriptions of the various SourceConfig fields and their defaults,
 // see the methods to SourceConfigBuilder.
 func DefaultSourceConfig() *SourceConfigBuilder {
-	return &SourceConfigBuilder{
-		cfg: SourceConfig{
-			NumElements:   1, // 0 is invalid (drops elements).
-			InitialSplits: 1, // 0 is invalid (drops elements).
-			KeySize:       8, // 0 is invalid (drops elements).
-			ValueSize:     8, // 0 is invalid (drops elements).
-			NumKeys: 	   8, // 0 is invalid (drops elements).
-		},
-	}
+    return &SourceConfigBuilder{
+        cfg: SourceConfig{
+            NumElements:    1, // 0 is invalid (drops elements).
+            InitialSplits:  1, // 0 is invalid (drops elements).
+            KeySize:        8, // 0 is invalid (drops elements).
+            ValueSize:      8, // 0 is invalid (drops elements).
+            HotKeys:        2, // 0 is invalid (drops elements).
+            HotKeyFraction: 1, // 0 is invalid (drops elements).
+        },
+    }
 }
 
 // NumElements is the number of elements for the source to generate and emit.
@@ -182,8 +187,8 @@ func DefaultSourceConfig() *SourceConfigBuilder {
 // Valid values are in the range of [1, ...] and the default value is 1. Values
 // of 0 (and below) are invalid as they result in sources that emit no elements.
 func (b *SourceConfigBuilder) NumElements(val int) *SourceConfigBuilder {
-	b.cfg.NumElements = val
-	return b
+    b.cfg.NumElements = val
+    return b
 }
 
 // InitialSplits determines the number of initial splits to perform in the
@@ -201,8 +206,8 @@ func (b *SourceConfigBuilder) NumElements(val int) *SourceConfigBuilder {
 // of 0 (and below) are invalid as they would result in dropping elements that
 // are expected to be emitted.
 func (b *SourceConfigBuilder) InitialSplits(val int) *SourceConfigBuilder {
-	b.cfg.InitialSplits = val
-	return b
+    b.cfg.InitialSplits = val
+    return b
 }
 
 // KeySize determines the size of the key of elements for the source to
@@ -210,8 +215,8 @@ func (b *SourceConfigBuilder) InitialSplits(val int) *SourceConfigBuilder {
 //
 // Valid values are in the range of [1, ...] and the default value is 8.
 func (b *SourceConfigBuilder) KeySize(val int) *SourceConfigBuilder {
-	b.cfg.KeySize = val
-	return b
+    b.cfg.KeySize = val
+    return b
 }
 
 // ValueSize determines the size of the value of elements for the source to
@@ -219,30 +224,33 @@ func (b *SourceConfigBuilder) KeySize(val int) *SourceConfigBuilder {
 //
 // Valid values are in the range of [1, ...] and the default value is 8.
 func (b *SourceConfigBuilder) ValueSize(val int) *SourceConfigBuilder {
-	b.cfg.ValueSize = val
-	return b
+    b.cfg.ValueSize = val
+    return b
 }
 
 // Build constructs the SourceConfig initialized by this builder. It also
 // performs error checking on the fields, and panics if any have been set to
 // invalid values.
 func (b *SourceConfigBuilder) Build() SourceConfig {
-	if b.cfg.InitialSplits <= 0 {
-		panic(fmt.Sprintf("SourceConfig.InitialSplits must be >= 1. Got: %v", b.cfg.InitialSplits))
-	}
-	if b.cfg.NumElements <= 0 {
-		panic(fmt.Sprintf("SourceConfig.NumElements must be >= 1. Got: %v", b.cfg.NumElements))
-	}
-	if b.cfg.KeySize <= 0 {
-		panic(fmt.Sprintf("SourceConfig.KeySize must be >= 1. Got: %v", b.cfg.KeySize))
-	}
-	if b.cfg.ValueSize <= 0 {
-		panic(fmt.Sprintf("SourceConfig.ValueSize must be >= 1. Got: %v", b.cfg.ValueSize))
-	}
-	if b.cfg.NumKeys <= 0 {
-		panic(fmt.Sprintf("SourceConfig.NumKeys must be >= 1. Got: #{b.cfg.NumKeys}"))
-	}
-	return b.cfg
+    if b.cfg.InitialSplits <= 0 {
+        panic(fmt.Sprintf("SourceConfig.InitialSplits must be >= 1. Got: %v", b.cfg.InitialSplits))
+    }
+    if b.cfg.NumElements <= 0 {
+        panic(fmt.Sprintf("SourceConfig.NumElements must be >= 1. Got: %v", b.cfg.NumElements))
+    }
+    if b.cfg.KeySize <= 0 {
+        panic(fmt.Sprintf("SourceConfig.KeySize must be >= 1. Got: %v", b.cfg.KeySize))
+    }
+    if b.cfg.ValueSize <= 0 {
+        panic(fmt.Sprintf("SourceConfig.ValueSize must be >= 1. Got: %v", b.cfg.ValueSize))
+    }
+    if b.cfg.HotKeys <= 0 {
+        panic(fmt.Sprintf("SourceConfig.HotKeys must be >= 1. Got: %v", b.cfg.HotKeys))
+    }
+    if b.cfg.HotKeyFraction <= 0 {
+        panic(fmt.Sprintf("SourceConfig.HotKeyFraction must be >= 1. Got: %v", b.cfg.HotKeyFraction))
+    }
+    return b.cfg
 }
 
 // BuildFromJSON constructs the SourceConfig by populating it with the parsed
@@ -257,22 +265,23 @@ func (b *SourceConfigBuilder) Build() SourceConfig {
 //	 "num_keys": 5,
 // }
 func (b *SourceConfigBuilder) BuildFromJSON(jsonData []byte) SourceConfig {
-	decoder := json.NewDecoder(bytes.NewReader(jsonData))
-	decoder.DisallowUnknownFields()
+    decoder := json.NewDecoder(bytes.NewReader(jsonData))
+    decoder.DisallowUnknownFields()
 
-	if err := decoder.Decode(&b.cfg); err != nil {
-		panic(fmt.Sprintf("Could not unmarshal SourceConfig: %v", err))
-	}
-	return b.cfg
+    if err := decoder.Decode(&b.cfg); err != nil {
+        panic(fmt.Sprintf("Could not unmarshal SourceConfig: %v", err))
+    }
+    return b.cfg
 }
 
 // SourceConfig is a struct containing all the configuration options for a
 // synthetic source. It should be created via a SourceConfigBuilder, not by
 // directly initializing it (the fields are public to allow encoding).
 type SourceConfig struct {
-	NumElements   int `json:"num_records"`
-	InitialSplits int `json:"initial_splits"`
-	NumKeys		  int `json:"num_keys"`
-	KeySize       int `json:"key_size"`
-	ValueSize     int `json:"value_size"`
+    NumElements     int `json:"num_records"`
+    InitialSplits   int `json:"initial_splits"`
+    HotKeys         int `json:"hot_keys"`
+    HotKeyFraction  int `json:"hot_key_fraction"`
+    KeySize         int `json:"key_size"`
+    ValueSize       int `json:"value_size"`
 }

@@ -40,6 +40,8 @@ golang {
   goBuild {
     // Build all the tests
     go 'build -o ./build/bin/pardo github.com/apache/beam/sdks/go/test/load/pardo'
+    go 'build -o ./build/bin/combine github.com/apache/beam/sdks/go/test/load/combine'
+    go 'build -o ./build/bin/group_by_key github.com/apache/beam/sdks/go/test/load/group_by_key'
   }
 }
 

@@ -16,7 +16,10 @@
 // yatzy is an implementation of https://en.wikipedia.org/wiki/Yatzy that shows
 // that pipeline construction is normal Go code. It can even be
 // non-deterministic and produce different pipelines on each invocation.
+
 package main
+
+/*
 
 import (
 	"context"
@@ -137,3 +140,4 @@ func main() {
 		log.Exitf(ctx, "Failed to execute job: %v", err)
 	}
 }
+ */

@@ -192,6 +192,7 @@ class SideInputTest(LoadTest):
                 self.input_options['key_size'],
                 self.input_options['value_size']))
         | 'Generate input' >> beam.ParDo(SyntheticSDFAsSource()))
+
     main_input |= 'Collect start time metrics' >> beam.ParDo(
         MeasureTime(self.metrics_namespace))
 

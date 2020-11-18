@@ -48,7 +48,8 @@ import (
 
 var (
     fanout                = flag.Int("fanout", 1, "Fanout")
-    iterations            = flag.Int("iterations", 1, "A number of subsequent ParDo transforms to be performed")
+    iterations            = flag.Int("iterations", 1,
+        "A number of subsequent ParDo transforms to be performed")
     syntheticSourceConfig = flag.String(
         "input_options",
         "{"+
@@ -56,7 +57,7 @@ var (
             "\"key_size\": 5, "+
             "\"value_size\": 15, "+
             "\"num_hot_keys\": 30, "+
-            "\"hot_key_fraction\": 0.5}",
+            "\"hot_key_fraction\": 1.0}",
         "A JSON object that describes the configuration for synthetic source")
 )
 

@@ -16,27 +16,30 @@
 package main
 
 import (
-    "bytes"
     "context"
     "flag"
+    "fmt"
     "github.com/apache/beam/sdks/go/pkg/beam"
     "github.com/apache/beam/sdks/go/pkg/beam/io/synthetic"
     "github.com/apache/beam/sdks/go/pkg/beam/log"
-    "github.com/apache/beam/sdks/go/pkg/beam/transforms/top"
     "github.com/apache/beam/sdks/go/pkg/beam/x/beamx"
 )
 
 var (
-    fanout                = flag.Int("fanout", 1, "Fanout")
-    topCount              = flag.Int("top_count", 20, "Top count")
+    sideInputType = flag.String("side_input_type", "iter",
+        "Specifies how the side input will be materialized in ParDo operation. One of [dict, iter, list].")
+    windowCount = flag.Int("window_count", 1,
+        "The number of fixed sized windows to subdivide the side input into.")
+    accessPercentage = flag.Int("access_percentage", 100,
+        "Specifies the percentage of elements in the side input to be accessed.")
+    sdfInitialElements = flag.Int("sdf_initial_elements", 1000,
+        "The number of SDF Initial Elements.")
     syntheticSourceConfig = flag.String(
         "input_options",
         "{"+
             "\"num_records\": 300, "+
             "\"key_size\": 5, "+
-            "\"value_size\": 15, "+
-            "\"num_hot_keys\": 30, "+
-            "\"hot_key_fraction\": 1.0}",
+            "\"value_size\": 15}",
         "A JSON object that describes the configuration for synthetic source")
 )
 
@@ -49,24 +52,46 @@ func parseSyntheticSourceConfig() synthetic.SourceConfig {
     }
 }
 
-func CompareLess(key []uint8, value []uint8) bool {
-    return bytes.Compare(key, value) < 0
+
+type doFn struct {
+    s beam.Scope
+}
+
+func (fn *doFn) ProcessElement (ctx context.Context, _ []uint8, config synthetic.SourceConfig) beam.PCollection {
+    return synthetic.SourceSingle(fn.s, config)
 }
 
 func main() {
     flag.Parse()
     beam.Init()
-
     ctx := context.Background()
-
     p, s := beam.NewPipelineWithRoot()
-    src := synthetic.SourceSingle(s, parseSyntheticSourceConfig())
-    for i := 0; i < *fanout; i++ {
-        top.LargestPerKey(s, src, *topCount, CompareLess)
-    }
 
-    err := beamx.Run(ctx, p)
-    if err != nil {
-        log.Fatalf(ctx, "Failed to execute job: %v", err)
+    var mainInputValues []int
+    for i := 0; i < *windowCount; i++ {
+        mainInputValues = append(mainInputValues, i)
+    }
+    mainInput := beam.Create(s, mainInputValues)
+
+    var sideInput beam.PCollection
+    initialElements := *sdfInitialElements
+    if *windowCount > 1 {
+        sideInput = mainInput
+        initialElements = *windowCount
+    } else {
+        var sideInputValues []int
+        for i := 0; i < initialElements; i++ {
+            sideInputValues = append(sideInputValues, i)
+        }
+        sideInput = beam.Create(s, sideInputValues)
+    }
+    fmt.Println(sideInput)
+
+    beam.ParDo(s, &doFn{s: s}, beam.Impulse(s),
+        beam.SideInput{Input: beam.Create(s, parseSyntheticSourceConfig())})
+
+
+    if err := beamx.Run(ctx, p); err != nil {
+        log.Exitf(ctx, "Failed to execute job: %v", err)
     }
 }

@@ -19,6 +19,7 @@ import (
     "context"
     "flag"
     "fmt"
+
     "github.com/apache/beam/sdks/go/pkg/beam"
     "github.com/apache/beam/sdks/go/pkg/beam/io/synthetic"
     "github.com/apache/beam/sdks/go/pkg/beam/log"
@@ -53,12 +54,21 @@ func parseSyntheticSourceConfig() synthetic.SourceConfig {
 }
 
 
+type syntheticSDFAsSource struct {
+    s beam.Scope
+}
+
+func (fn *syntheticSDFAsSource) ProcessElement (ctx context.Context, _ []uint8, config synthetic.SourceConfig) beam.PCollection {
+    return synthetic.SourceSingle(fn.s, config)
+}
+
 type doFn struct {
     s beam.Scope
 }
 
-func (fn *doFn) ProcessElement (ctx context.Context, _ []uint8, config synthetic.SourceConfig) beam.PCollection {
-    return synthetic.SourceSingle(fn.s, config)
+func (fn *doFn) ProcessElement (ctx context.Context, _ []int) beam.PCollection {
+    return beam.ParDo(fn.s, &syntheticSDFAsSource{s: fn.s}, beam.Impulse(fn.s),
+        beam.SideInput{Input: beam.Create(fn.s, parseSyntheticSourceConfig())})
 }
 
 func main() {
@@ -66,6 +76,10 @@ func main() {
     beam.Init()
     ctx := context.Background()
     p, s := beam.NewPipelineWithRoot()
+
+    // syntheticSourceConfig := parseSyntheticSourceConfig()
+    // elementsPerWindow := syntheticSourceConfig.NumElements / *windowCount
+    // elementsToAccess := elementsPerWindow * *accessPercentage / 100
 
     var mainInputValues []int
     for i := 0; i < *windowCount; i++ {
@@ -85,11 +99,11 @@ func main() {
         }
         sideInput = beam.Create(s, sideInputValues)
     }
+    sideInput = beam.ParDo(s, &doFn{s: s}, sideInput)
     fmt.Println(sideInput)
-
-    beam.ParDo(s, &doFn{s: s}, beam.Impulse(s),
-        beam.SideInput{Input: beam.Create(s, parseSyntheticSourceConfig())})
-
+    beam.ParDo0(s, func(col beam.PCollection) {
+        fmt.Println(col)
+    }, sideInput)
 
     if err := beamx.Run(ctx, p); err != nil {
         log.Exitf(ctx, "Failed to execute job: %v", err)
